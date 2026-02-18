@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import {
     ReactFlow,
     Background,
@@ -94,6 +94,12 @@ export default function RoadmapFlow({ roadmapData }) {
 
     const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+    // Sync flow state when roadmapData changes (e.g. loading from history)
+    useEffect(() => {
+        setNodes(initialNodes);
+        setEdges(initialEdges);
+    }, [initialNodes, initialEdges, setNodes, setEdges]);
 
     const onConnect = useCallback(
         (params) => setEdges((eds) => addEdge(params, eds)),

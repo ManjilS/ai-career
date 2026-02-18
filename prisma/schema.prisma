@@ -27,6 +27,7 @@ model User {
   assessments   Assessment[]
   resume        Resume?
   coverLetter   CoverLetter[]
+  roadmapHistory RoadmapHistory[]
 }
 
 model Assessment {
@@ -106,4 +107,16 @@ model IndustryInsight {
   createdAt               DateTime @default(now())
 
   @@index([industry])
+}
+
+model RoadmapHistory {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  title       String
+  careerGoal  String
+  roadmapData Json
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
 }

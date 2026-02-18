@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { generateCareerRoadmap } from "@/actions/roadmap";
+import { useState, useTransition, useEffect, useCallback } from "react";
+import { generateCareerRoadmap, saveRoadmap, getRoadmapHistory, deleteRoadmap } from "@/actions/roadmap";
 import RoadmapFlow from "./RoadmapFlow";
+import RoadmapSidebar from "./RoadmapSidebar";
 import {
     Sparkles,
     Map,
@@ -32,6 +33,26 @@ export default function RoadmapView() {
     const [roadmapData, setRoadmapData] = useState(null);
     const [isPending, startTransition] = useTransition();
 
+    // Sidebar state
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [history, setHistory] = useState([]);
+    const [activeHistoryId, setActiveHistoryId] = useState(null);
+    const [isSaving, setIsSaving] = useState(false);
+
+    // Load history on mount
+    const loadHistory = useCallback(async () => {
+        try {
+            const data = await getRoadmapHistory();
+            setHistory(data);
+        } catch (err) {
+            console.error("Failed to load history:", err);
+        }
+    }, []);
+
+    useEffect(() => {
+        loadHistory();
+    }, [loadHistory]);
+
     const handleGenerate = (goal) => {
         const target = goal || careerGoal;
         if (!target.trim()) {
@@ -44,12 +65,49 @@ export default function RoadmapView() {
                 const data = await generateCareerRoadmap(target.trim());
                 setRoadmapData(data);
                 setCareerGoal(target.trim());
+                setActiveHistoryId(null);
                 toast.success("Roadmap generated successfully!");
+
+                // Auto-save to DB
+                try {
+                    setIsSaving(true);
+                    const saved = await saveRoadmap(target.trim(), data);
+                    setActiveHistoryId(saved.id);
+                    await loadHistory();
+                } catch (saveErr) {
+                    console.error("Failed to save roadmap:", saveErr);
+                } finally {
+                    setIsSaving(false);
+                }
             } catch (err) {
                 console.error(err);
                 toast.error("Failed to generate roadmap. Please try again.");
             }
         });
+    };
+
+    const handleSelectHistory = (item) => {
+        setRoadmapData(item.roadmapData);
+        setCareerGoal(item.careerGoal);
+        setActiveHistoryId(item.id);
+        setSidebarOpen(false);
+        toast.success(`Loaded: ${item.careerGoal}`);
+    };
+
+    const handleDeleteHistory = async (id) => {
+        try {
+            await deleteRoadmap(id);
+            if (activeHistoryId === id) {
+                setRoadmapData(null);
+                setCareerGoal("");
+                setActiveHistoryId(null);
+            }
+            await loadHistory();
+            toast.success("Roadmap deleted.");
+        } catch (err) {
+            console.error(err);
+            toast.error("Failed to delete roadmap.");
+        }
     };
 
     const totalSkills = roadmapData?.stages?.reduce(
@@ -59,6 +117,16 @@ export default function RoadmapView() {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900">
+            {/* History Sidebar */}
+            <RoadmapSidebar
+                history={history}
+                onSelect={handleSelectHistory}
+                onDelete={handleDeleteHistory}
+                isOpen={sidebarOpen}
+                onToggle={() => setSidebarOpen((v) => !v)}
+                activeId={activeHistoryId}
+            />
+
             {/* Hero Header */}
             <div className="relative overflow-hidden">
                 {/* Animated background blobs */}
@@ -186,7 +254,13 @@ export default function RoadmapView() {
                                     <h2 className="text-2xl font-bold text-white">{roadmapData.title}</h2>
                                     <p className="text-slate-400 mt-1 text-sm">{roadmapData.description}</p>
                                 </div>
-                                <div className="flex gap-3 flex-wrap">
+                                <div className="flex gap-3 flex-wrap items-center">
+                                    {isSaving && (
+                                        <div className="flex items-center gap-1.5 text-slate-400 text-xs">
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                            Saving...
+                                        </div>
+                                    )}
                                     <div className="bg-violet-500/20 border border-violet-500/30 rounded-xl px-4 py-2 text-center">
                                         <p className="text-violet-300 text-xs">Stages</p>
                                         <p className="text-white font-bold text-lg">{roadmapData.stages?.length}</p>
