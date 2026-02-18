@@ -1,6 +1,8 @@
 "use server";
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { db } from "@/lib/prisma";
+import { auth } from "@clerk/nextjs/server";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
@@ -45,4 +47,59 @@ export async function generateCareerRoadmap(careerGoal) {
     const cleanedText = text.replace(/```(?:json)?\n?/g, "").trim();
 
     return JSON.parse(cleanedText);
+}
+
+export async function saveRoadmap(careerGoal, roadmapData) {
+    const { userId } = await auth();
+    if (!userId) throw new Error("Unauthorized");
+
+    const user = await db.user.findUnique({ where: { clerkUserId: userId } });
+    if (!user) throw new Error("User not found");
+
+    const saved = await db.roadmapHistory.create({
+        data: {
+            userId: user.id,
+            title: roadmapData.title,
+            careerGoal,
+            roadmapData,
+        },
+    });
+
+    return saved;
+}
+
+export async function getRoadmapHistory() {
+    const { userId } = await auth();
+    if (!userId) throw new Error("Unauthorized");
+
+    const user = await db.user.findUnique({ where: { clerkUserId: userId } });
+    if (!user) throw new Error("User not found");
+
+    const history = await db.roadmapHistory.findMany({
+        where: { userId: user.id },
+        orderBy: { createdAt: "desc" },
+        select: {
+            id: true,
+            title: true,
+            careerGoal: true,
+            roadmapData: true,
+            createdAt: true,
+        },
+    });
+
+    return history;
+}
+
+export async function deleteRoadmap(id) {
+    const { userId } = await auth();
+    if (!userId) throw new Error("Unauthorized");
+
+    const user = await db.user.findUnique({ where: { clerkUserId: userId } });
+    if (!user) throw new Error("User not found");
+
+    await db.roadmapHistory.delete({
+        where: { id, userId: user.id },
+    });
+
+    return { success: true };
 }
